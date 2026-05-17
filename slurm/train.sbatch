@@ -22,8 +22,25 @@ set -euo pipefail
 export BUDDI_ROOT=$HOME/buddi
 cd $BUDDI_ROOT
 
-# --- Adjust conda path to your install ---
-source $HOME/miniconda3/etc/profile.d/conda.sh
+# --- Activate conda (auto-detect common install paths) ---
+CONDA_SH=""
+for C in \
+    $HOME/miniconda3/etc/profile.d/conda.sh \
+    $HOME/anaconda3/etc/profile.d/conda.sh \
+    $HOME/conda/etc/profile.d/conda.sh \
+    /apps/anaconda3/etc/profile.d/conda.sh \
+    /apps/miniconda3/etc/profile.d/conda.sh \
+    /opt/conda/etc/profile.d/conda.sh \
+    /usr/local/anaconda3/etc/profile.d/conda.sh \
+    /usr/local/miniconda3/etc/profile.d/conda.sh; do
+  [ -f "$C" ] && { CONDA_SH="$C"; break; }
+done
+if [ -z "$CONDA_SH" ]; then
+  echo "ERROR: conda.sh not found. Edit train.sbatch and add your path."
+  exit 1
+fi
+echo "[env] using conda.sh from $CONDA_SH"
+source $CONDA_SH
 conda activate buddi
 
 source $BUDDI_ROOT/slurm/lib_common.sh

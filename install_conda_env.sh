@@ -1,5 +1,5 @@
 conda create -n hhcenv39 python=3.9 -y
-conda run -n hhcenv39 --live-stream conda install -c pytorch pytorch=1.9.1 torchvision cudatoolkit=10.2 -y
+conda run -n hhcenv39 --live-stream conda install -c pytorch pytorch=1.9.1 torchvision cudatoolkit=11 -y #10.2
 conda run -n hhcenv39 --live-stream conda install -c fvcore -c iopath -c conda-forge fvcore iopath -y
 conda run -n hhcenv39 --live-stream conda install -c bottler nvidiacub -y
 conda run -n hhcenv39 --live-stream conda install pytorch3d -c pytorch3d -y
