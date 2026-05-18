@@ -1,2 +1,27 @@
+# Python / OS
 __pycache__/
+*.pyc
 .DS_Store
+__MACOSX/
+
+# ---- Licensed body models (Max Planck / SMPL / SMPL-X / SMIL) ----
+# Re-fetch with repro/shared/env/3_fetch_bodymodels.sh
+essentials/body_models/
+
+# ---- Author-distributed essentials (ckpt + yaml + priors + contact + body_model_utils) ----
+# Re-fetch with repro/shared/env/2_fetch_essentials.sh
+essentials/buddi/*.pt
+essentials/buddi/*.yaml
+essentials/contact/
+essentials/priors/
+essentials/body_model_utils/
+essentials/imar_vision_datasets_tools
+
+# ---- Large sampling outputs (regenerable via repro/phase_a/runners/run_uncond.sh) ----
+repro/phase_a/outputs/uncond/generate_*/x_*_smplx.pkl
+repro/phase_a/outputs/uncond/generate_*/renders/
+repro/phase_a/outputs/smoke/
+
+# ---- Misc local ----
+*.zip
+miniconda.sh
