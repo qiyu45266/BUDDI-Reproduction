@@ -1,0 +1,7 @@
+cmd_args:Namespace(exp_cfgs=['/mnt/c/Users/lincu/Downloads/buddi/buddi/essentials/buddi/buddi_unconditional.yaml'], exp_opts=[], eval_dataset_name='flickrci3ds', eval_dataset_split='val', condition=False, inpaint=False, inpaint_params=['orient_h0', 'pose_h0', 'shape_h0', 'transl_h0'], inpaint_item_idx=0, output_folder='/mnt/c/Users/lincu/Downloads/buddi/buddi/outputs/person_a/uncond', vis_folder=None, checkpoint_name='/mnt/c/Users/lincu/Downloads/buddi/buddi/essentials/buddi/buddi_unconditional.pt', num_samples=512, max_t=1000, log_steps=100, skip_steps=10, eta=0.0, body_model_utils_folder='essentials/body_model_utils/', max_images_render=8, save_vis=True, run_eval=False, render_width=200, render_height=256, render_floor=False, render_high_res=False, batch_size=8, seed=42)
+T: [991 981 971 961 951 941 931 921 911 901 891 881 871 861 851 841 831 821
+ 811 801 791 781 771 761 751 741 731 721 711 701 691 681 671 661 651 641
+ 631 621 611 601 591 581 571 561 551 541 531 521 511 501 491 481 471 461
+ 451 441 431 421 411 401 391 381 371 361 351 341 331 321 311 301 291 281
+ 271 261 251 241 231 221 211 201 191 181 171 161 151 141 131 121 111 101
+  91  81  71  61  51  41  31  21  11   1]

@@ -1,0 +1,29 @@
+diff --git a/llib/methods/hhc_diffusion/evaluation/sample.py b/llib/methods/hhc_diffusion/evaluation/sample.py
+index 7b0b518..2b53b24 100644
+--- a/llib/methods/hhc_diffusion/evaluation/sample.py
++++ b/llib/methods/hhc_diffusion/evaluation/sample.py
+@@ -185,6 +185,10 @@ def parse_args():
+         help='render high resolution images with floor'
+     )
+     parser.add_argument("--batch_size", default=16, type=int)
++    parser.add_argument(
++        "--seed", type=int, default=None,
++        help="If set, seed torch + numpy + python random for reproducible sampling.",
++    )
+ 
+     cmd_args = parser.parse_args()
+ 
+@@ -475,4 +479,13 @@ def main(cfg, cmd_args):
+ 
+ if __name__ == "__main__":
+     cfg, cmd_args = parse_args()
++    if cmd_args.seed is not None:
++        import random
++        torch.manual_seed(cmd_args.seed)
++        torch.cuda.manual_seed_all(cmd_args.seed)
++        np.random.seed(cmd_args.seed)
++        random.seed(cmd_args.seed)
++        torch.backends.cudnn.deterministic = True
++        torch.backends.cudnn.benchmark = False
++        print(f"[sample.py] seeded with {cmd_args.seed}")
+     main(cfg, cmd_args)

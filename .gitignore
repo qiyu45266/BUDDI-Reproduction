@@ -1,2 +1,51 @@
+# Python / OS
 __pycache__/
+*.pyc
 .DS_Store
+__MACOSX/
+
+# ---- Licensed body models (Max Planck / SMPL / SMPL-X / SMIL) ----
+# Re-fetch with repro/shared/env/3_fetch_bodymodels.sh
+essentials/body_models/
+
+# ---- Author-distributed essentials (ckpt + yaml + priors + contact + body_model_utils) ----
+# Re-fetch with repro/shared/env/2_fetch_essentials.sh
+essentials/buddi/*.pt
+essentials/buddi/*.yaml
+essentials/contact/
+essentials/priors/
+essentials/body_model_utils/
+essentials/imar_vision_datasets_tools
+
+# ---- Large sampling outputs (regenerable via repro/phase_a/runners/run_uncond.sh) ----
+repro/phase_a/outputs/uncond/generate_*/x_*_smplx.pkl
+repro/phase_a/outputs/uncond/generate_*/renders/
+repro/phase_a/outputs/smoke/
+# 94 MB, regenerable via repro/phase_a/runners/run_chi3d_fid.sh
+repro/phase_a/outputs/chi3d_distribution.pkl
+# Phase C raw rows for RQ-7 — ~1.2 MB, kept tracked; but the .pkl-derived big files gitignore if any
+repro/phase_c/outputs/**/_tmp_*.pkl
+
+# ---- Raw datasets (CHI3D / FlickrCI3D), too large + licensed ----
+# We keep datasets/scripts/ (upstream preprocessing tools, ~28 KB) tracked,
+# but block everything else under datasets/. Re-extract with
+# repro/shared/env/4_extract_datasets.sh after placing the tarballs in datasets/.
+datasets/original/
+datasets/*.tar
+datasets/*.tar.gz
+datasets/*.tgz
+datasets/*.zip
+datasets/*.7z
+# Catch any extracted media we might've missed (images, videos, mocap clips)
+datasets/**/*.png
+datasets/**/*.jpg
+datasets/**/*.jpeg
+datasets/**/*.mp4
+datasets/**/*.avi
+datasets/**/*.mov
+datasets/**/*.npz
+datasets/**/*.pkl
+
+# ---- Misc local ----
+*.zip
+miniconda.sh
