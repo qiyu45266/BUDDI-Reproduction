@@ -1,0 +1,12 @@
+2026-05-25 21:33:21.620 | INFO     | llib.data.preprocess.demo:load:483 - Processing data from demo/data/FlickrCI3D_Signatures/demo
+2026-05-25 21:33:21.626 | INFO     | llib.data.preprocess.demo:read_data:276 - Loading college_232334 from demo/data/FlickrCI3D_Signatures/demo/images/college_232334.png
+2026-05-25 21:33:21.627 | INFO     | llib.data.preprocess.demo:read_data:277 - Loading BEV from demo/data/FlickrCI3D_Signatures/demo/bev/college_232334_0.08.npz
+2026-05-25 21:33:21.627 | INFO     | llib.data.preprocess.demo:read_data:278 - Loading ViTPose from demo/data/FlickrCI3D_Signatures/demo/vitpose/college_232334_keypoints.json
+2026-05-25 21:33:21.627 | INFO     | llib.data.preprocess.demo:read_data:279 - Loading OpenPose from demo/data/FlickrCI3D_Signatures/demo/keypoints/keypoints/college_232334.json
+2026-05-25 21:33:21.828 | INFO     | __main__:main:93 - Processing 2 items from demo.
+unique_best_matches is True but matrix.shape[0] != 2
+unique_best_matches is True but matrix.shape[0] != 2
+  0%|          | 0/2 [00:00<?, ?it/s]2026-05-25 21:33:21.832 | INFO     | __main__:main:117 - Processing item college_232334_0 of index 0.
+2026-05-25 21:33:25.236 | INFO     | llib.models.diffusion.build:build_diffusion:63 - Building diffusion model with:                1000 steps                noise schedule cosine                rescale timesteps False                timestep respacing                 loss type custom                model mean type start_x                model var type fixed_large
+2026-05-25 21:35:43.045 | INFO     | fit_module:fit:358 - Starting with stage: 0 
+

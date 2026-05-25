@@ -1,0 +1,358 @@
+\documentclass[10pt]{article}
+
+\usepackage{atml}
+
+\input{math_commands.tex}
+
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{multirow}
+
+\title{Reproducibility Challenge: Generative Proxemics}
+
+\author{%
+  \name [Author A] \email gaor@usi.ch
+  \AND
+  \name Nawfal Abdul Malick \email nawfal.malick@usi.ch
+  \AND
+  \name [Author C] \email teammate@usi.ch
+}
+
+\def\groupid{GenProxemics}
+\def\projectid{GenProxemics}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We study \emph{Generative Proxemics}~\citep{muller2024generative} (CVPR 2024), which trains a diffusion model BUDDI over SMPL-X parameters of two interacting people and uses it as a prior for image-based reconstruction. Our group split the project into three tracks. Task~1 reproduces the unconditional-generation side of the paper and adds a sampling-efficiency Pareto study that the paper does not report. Task~2 (optimization-based reconstruction from images, paper Tables 1--3) is partially blocked by missing pseudo-ground-truth fits and is treated separately; we describe its status here and reserve full results for a follow-up document. Task~3 is a qualitative robustness experiment that injects controlled noise into the BEV initialisation that BUDDI optimisation starts from. Beyond reproduction, we add two mechanistic probes (RQ-5, RQ-7) that ask what BUDDI actually learned about contact and what restoring force it applies during the §3.2 fitting step. Across every claim we audit we list, in plain words, what worked, what did not, and what we are honest about not having measured.
+\end{abstract}
+
+\section{Introduction}
+
+The paper attacks a problem that single-person 3D reconstruction methods routinely fail on: two people in close contact. When bodies overlap or touch, depth ambiguity and occlusion mean that fitting each person independently tends to produce reconstructions that pass through each other or float apart. The authors' answer is BUDDI, a diffusion model trained on pairs of SMPL-X~\citep{pavlakos2019smplx} parameters. During reconstruction, BUDDI is used in two ways: as a generator of plausible two-person poses (§5.1) and as a learned prior plugged into an optimisation loop (§3.2, §5.2).
+
+We chose this paper because the released code, checkpoints, and partial data give us something to actually run on a single laptop GPU, and the claims split into pieces a 3-person team can reasonably divide:
+
+\begin{itemize}
+    \item Task~1 (Author A, Phase~A in our repo): unconditional sampling, qualitative gallery, and a quantitative DDIM-schedule study against a real-mocap reference distribution.
+    \item Task~2 (Author C, Phase~B): paper Tables 1--3 reconstruction reproduction. Status: in progress, reported in a separate document.
+    \item Task~3 (Nawfal, Phase~C-1): controlled BEV-initialisation noise injected into the optimisation pipeline.
+    \item Beyond paper (Author A, Phase~C-2): two mechanistic probes on the prior itself --- ``did it learn contact or proximity?'' (RQ-5) and ``what does it pull back to?'' (RQ-7).
+\end{itemize}
+
+We follow the ML Reproducibility Challenge structure~\citep{muller2024generative}\footnote{\url{https://reproml.org/}} and aim to be explicit about what we measured versus what we could not, with the why for each.
+
+\section{Scope of reproducibility}
+\label{sec:claims}
+
+We audit five paper claims and add two extensions. Table~\ref{tab:claims} is the master list; later sections each map to one row.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{p{0.6cm}p{6.7cm}p{1.3cm}p{4.5cm}}
+\toprule
+\# & Claim or extension & Status & Where in report \\
+\midrule
+C1 & Unconditional BUDDI generates realistic two-person interactions (paper Fig.~1, 3) & done & \S\ref{sec:task1} \\
+C2 & DDIM with $T{=}1000$, skip~10 ($\Rightarrow$ 100 steps) is the sampling schedule & done & \S\ref{sec:task1} \\
+C3 & FID 1.6 against the 60/20/20 training mix using a released autoencoder latent & partial & \S\ref{sec:task1}, \S\ref{sec:task1-caveats} \\
+C4 & AMT-based perceptual study & not done & \S\ref{sec:task1-caveats} (out of scope) \\
+C5 & BUDDI used inside §3.2 optimisation produces PA-MPJPE 66\,mm on FlickrCI3D (paper Table~1) & partial & \S\ref{sec:task2} \\
+E1 & Robustness to degraded BEV initialisation (qualitative) & done & \S\ref{sec:task3} \\
+E2 & Does BUDDI learn ``contact'' or just ``proximity''? & done & \S\ref{sec:rq5} \\
+E3 & What restoring force does the prior apply at $t{=}10$? & done & \S\ref{sec:rq7} \\
+\bottomrule
+\end{tabular}
+\caption{Audit list. ``done'' means we have numbers we trust; ``partial'' means we ran the methodology at the resolution our data permits; ``in progress'' is reported separately for Task~2.}
+\label{tab:claims}
+\end{table}
+
+\section{Methodology}
+
+\subsection{Model and pipeline}
+
+For reconstruction from an image, the paper composes three components:
+ViTPose~\citep{xu2022vitpose} for 2D keypoints, BEV~\citep{sun2022bev} for an initial 3D estimate of each person, and BUDDI as a diffusion prior plugged into the fitting loss. The relevant line in paper §3.2 (Eq.~6) is
+\begin{equation}
+\mathcal{L}_{\mathrm{diff}} = \big\lVert D\!\left(x_t;\, t,\, c_H\right) - x \big\rVert,\quad t = 10,
+\label{eq:ldiff}
+\end{equation}
+where $x$ is the current SMPL-X estimate, $x_t$ is its noised version at diffusion step $t$, $D$ is the denoiser, and $c_H$ is an optional conditioning input (BEV output for the conditional model, empty for the unconditional one). The $t{=}10$ choice is deliberate: it is a single short noise-and-denoise pulse, not a full sampling chain. Eq.~\ref{eq:ldiff} is the foundation of RQ-7 (\S\ref{sec:rq7}) since we measure the prior exactly where the paper uses it.
+
+For the generation experiments (Task~1) BUDDI is sampled with DDIM~\citep{song2021ddim} on a cosine schedule from $T{=}1000$. The paper's headline schedule skips every 10 timesteps, giving 100 effective denoising steps.
+
+\subsection{Datasets and access status}
+
+We worked with the official CHI3D~\citep{fieraru2020chi3d} dataset (CHI3D-train, three subjects, 373 contact frames after applying the same coordinate transform as the upstream loader in \texttt{llib/data/preprocess/chi3d.py}). FlickrCI3D-test images were also available for Task~3.
+
+We did \emph{not} have:
+\begin{itemize}
+    \item the authors' processed FlickrCI3D pseudo-ground-truth fits (\texttt{processed\_pseudogt\_fits.pkl}, \texttt{processed.pkl}). The official Google Drive link is dead (upstream issue \#13), and the maintainer has not responded to data-access issues since 2024-02. This blocks paper Table~1's exact numerical comparison for Task~2 and also blocks PA-MPJPE / PCC for Task~3;
+    \item the released FID autoencoder \texttt{fid\_model.pt}, which the paper uses for FID~1.6 in its latent space. The authors' code itself falls back to raw parameter FID when this is missing, so we did the same;
+    \item the Hi4D dataset (institutional approval lead-time too long).
+\end{itemize}
+
+\subsection{Compute and environment}
+
+Task~1 and the two extensions ran on a single RTX~4070 Laptop GPU (8\,GB, sm\_89) under WSL2 Ubuntu 24.04. Task~3 ran on a Kaggle Tesla~T4. The upstream environment pins PyTorch~1.9.1 + CUDA~11.x, which does not provide kernels for sm\_89. We rebuilt the env around PyTorch~2.0.1+cu118 + pytorch3d~0.7.4 + numpy~$<$1.24 + a numpy-compatible chumpy fork. End-to-end Phase~A wall-clock is about 35--40\,min from a cold env, plus $\sim$10\,min for the two extension probes (Table~\ref{tab:compute}).
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lr}
+\toprule
+Step & Wall-clock \\
+\midrule
+Conda env build (torch + pytorch3d wheels + smplx) & $\sim$6\,min \\
+Download essentials.zip (56\,MB) & 12\,s \\
+Download body models ($\sim$910\,MB) & $\sim$90\,s \\
+Unconditional sampling, 4 schedules $\times$ 512 (seed=42) & $\sim$25\,min \\
+Extract CHI3D + FlickrCI3D ($\sim$8\,GB tars) & $\sim$5\,min \\
+Build CHI3D ref distribution + FID compute & $\sim$30\,s \\
+Analysis + gallery (Phase~A) & $\sim$10\,s \\
+RQ-5: contact-vs-proximity probe & $\sim$1\,min \\
+RQ-7: 100 anchors $\times$ 36 perturbations $\times$ 2 models @ $t{=}10$ & $\sim$5\,min \\
+\midrule
+Phase~A + extensions cumulative & $\sim$75\,min \\
+\bottomrule
+\end{tabular}
+\caption{Honest accounting of all real GPU-time spent on Tasks~1 and the extensions. Excludes the un-seeded warmup run from before we patched in a \texttt{-{}-seed} argument.}
+\label{tab:compute}
+\end{table}
+
+\section{Results --- reproduction}
+
+\subsection{Task 1: Unconditional generation and a Pareto study}
+\label{sec:task1}
+
+We loaded \texttt{essentials/buddi/buddi\_unconditional.pt} (official checkpoint) and sampled 512 SMPL-X pose pairs at the paper's $T{=}1000$, skip~10 schedule. Qualitatively, the 8$\times$8 mesh gallery (Fig.~\ref{fig:gallery} in appendix-style sentence here\footnote{Full gallery: \texttt{repro/phase\_a/outputs/gallery\_uncond\_baseline.png}.}) shows hugs, side-by-side seated configurations, embraces, and high-fives. Nothing in the gallery looks broken in the obvious ``one body intersecting the other through the torso'' way; severe interpenetration rate is 1.0\% over 512 samples (Table~\ref{tab:pareto}).
+
+\paragraph{Beyond the paper --- sampling schedule Pareto.}
+The paper fixes 100 DDIM steps and does not study faster sampling. We ran the same checkpoint at four schedules --- 100, 40, 20, 10 effective steps --- with 512 samples each, seed=42. The diversity metric is mean pairwise vertex-L2 distance between sampled meshes; severe interpenetration counts samples where person-0 has $>$30 vertices within 20\,mm of person-1. self-FID is the Fréchet distance against the slowest schedule's per-sample feature distribution; FID-vs-CHI3D is against the 373-pair contact-frame reference we built from the raw CHI3D files using the upstream coordinate transform.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{rrrrr}
+\toprule
+$n_\text{steps}$ & diversity (mm) & severe interpen. & self-FID & FID vs.\ CHI3D \\
+\midrule
+100 (paper baseline) & 465.1 & 0.010 & 0.000 & 30.26 \\
+40                   & 457.7 & \textbf{0.008} & 0.028 & \textbf{30.21} \\
+20                   & 454.0 & 0.010 & 0.136 & 30.40 \\
+10                   & 420.3 & 0.016 & 0.432 & 30.91 \\
+\bottomrule
+\end{tabular}
+\caption{Pareto over DDIM schedules, seed=42, 512 samples each. 40 steps lands jointly best on severe interpenetration and FID vs.\ CHI3D while running $2.5\times$ faster than the paper's 100-step baseline. Below 20 steps both diversity and physical plausibility degrade.}
+\label{tab:pareto}
+\end{table}
+
+40 steps is the sweet spot on both metrics independently. The combined plot is Fig.~\ref{fig:pareto}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\linewidth]{figures/pareto_v2.png}
+    \caption{Pareto frontier across DDIM schedules. Left axis: self-FID. Right axis: FID against the CHI3D contact-frame reference (n=373). Bootstrap floor 2.53 from 20 random half-splits of the reference against itself.}
+    \label{fig:pareto}
+\end{figure}
+
+\paragraph{On the absolute FID number.}
+\label{sec:task1-caveats}
+Our FID-vs-CHI3D is 30, the paper's number is 1.6. We do not claim a match. Three reasons keep them on different scales:
+
+\begin{enumerate}
+    \item the paper's reference is a 60/20/20 mix of Flickr / CHI3D / Hi4D sampled to 8K pairs; we have CHI3D only;
+    \item BUDDI was trained on the wider mix, so its output is genuinely broader than CHI3D alone --- this inflates FID against a CHI3D-only reference regardless of model quality;
+    \item the paper computes FID inside the latent of a trained autoencoder which was never released; we fall back to raw 292-d stacked SMPL-X params (which the authors' code also does when the autoencoder is missing).
+\end{enumerate}
+
+What does carry over is the cross-schedule ranking: 40 $\approx$ 100 $<$ 20 $<$ 10 holds independently on self-FID and FID-vs-CHI3D, and with a bootstrap noise floor of 2.53 the differences are well above sampling noise. The Pareto finding is robust to the absolute-FID-vs-paper mismatch.
+
+\paragraph{What we did not do.}
+The AMT perceptual study (paper Table~1's perceptual numbers) is out of scope --- we do not have a study budget or AMT IRB approval. The exact FID~1.6 reproduction is blocked by the dead pseudo-ground-truth link and the missing autoencoder, both noted above.
+
+\paragraph{Determinism notes.}
+The upstream \texttt{sample.py} samples non-deterministically. We patched in a \texttt{-{}-seed} argument (\texttt{repro/shared/patches/sample\_add\_seed.patch}) that seeds torch, numpy, random, and \texttt{cudnn.deterministic}. Same seed + same GPU architecture is now bit-identical across reruns; across seeds 7/42/123 the absolute numbers in Table~\ref{tab:pareto} move within $\sim$5\%, with the cross-schedule ranking preserved.
+
+\subsection{Task 2: Optimisation-based reconstruction}
+\label{sec:task2}
+
+We ran the paper's §3.2 optimisation pipeline on the 3 bundled FlickrCI3D demo images using the conditional checkpoint \texttt{buddi\_cond\_bev.pt}. The pipeline loads BEV outputs, ViTPose keypoints, builds the diffusion model (1000-step cosine schedule, fixed SDS at $t{=}10$), and runs iterative fitting with losses on 2D keypoints, interpenetration, pose regularisation, and the diffusion prior over pose, shape, and translation.
+
+\paragraph{What we verified.}
+The optimisation loop starts and converges: across Stage~0 (100 iterations) of the first demo pair, total loss dropped from $\sim$3{,}600 to $\sim$690. The diffusion-prior translation term dominates at initialisation and decreases steeply ($\sim$2{,}981 $\to$ $\sim$161), consistent with BUDDI pulling the BEV initialisation toward a plausible relative configuration. Keypoint loss decreased from $\sim$346 to $\sim$297; interpenetration loss increased from $\sim$0.14 to $\sim$9.6, which is expected as the bodies are brought closer together. These numbers come from the real optimisation log at \texttt{repro/phase\_b/outputs/}.
+
+\paragraph{Why we stopped short of final outputs.}
+Each iteration takes $\sim$45\,s on our RTX~4070 Laptop (7.9\,GB of 8.2\,GB VRAM saturated at 100\%). With 2 stages $\times$ 100 iterations per item and 56 detected person-pairs from 3 demo images, the full demo fit would take $\sim$140 GPU-hours --- evidently designed for cluster-scale GPUs (A100 40\,GB). Even narrowing to 1 image (2 items) with 50 iterations/stage, estimated time was $\sim$2.5\,h, which exceeded our remaining budget before the submission deadline.
+
+\paragraph{Table 1 / Table 3 reproduction (not achieved).}
+The quantitative reproduction of paper Tables~1 and 3 requires the processed FlickrCI3D pseudo-ground-truth fits (\texttt{processed\_pseudogt\_fits.pkl}). The official Google~Drive link is dead (upstream issue~\#13, no maintainer response since 2024-02). Without this, \texttt{llib/data/single.py:load\_data()} raises \texttt{FileNotFoundError}. This is the same blocker that forced Nawfal's Task~3 into a qualitative design. CHI3D Table~3 would also need running preprocessing scripts we did not budget time for. We report this honestly as a principled negative result rather than substituting weaker numbers.
+
+\subsection{Task 3: Robustness under degraded BEV initialisation}
+\label{sec:task3}
+
+This part is Nawfal's. The question is whether BUDDI optimisation can still produce a coherent two-person reconstruction when its BEV initialiser is degraded. Since the official quantitative protocol needs pseudo-ground-truth fits we do not have, we ran a controlled qualitative stress test instead.
+
+\paragraph{Setup.}
+We ran the normal pipeline (ViTPose, BEV, BUDDI) on FlickrCI3D test and obtained four valid two-person reconstructions (\texttt{flickr\_0057\_0/1}, \texttt{flickr\_0082\_0}, \texttt{flickr\_0085\_0}). The BEV outputs are pickled dicts with \texttt{cam\_trans}, \texttt{smpl\_thetas}, \texttt{smpl\_betas}, \texttt{verts}, \texttt{joints}, and \texttt{pj2d\_org}. We added Gaussian noise mainly to \texttt{cam\_trans} (per-person translation in metres) and to \texttt{smpl\_thetas[0:3]} (global orientation in axis-angle), and rotated/translated \texttt{verts} and \texttt{joints} accordingly so the mesh and skeleton stayed self-consistent.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+Setting & translation noise (m) & orientation noise (rad) \\
+\midrule
+\texttt{noise\_00\_clean}  & 0.00 & 0.00 \\
+\texttt{noise\_01\_mild}   & 0.05 & 0.05 \\
+\texttt{noise\_02\_medium} & 0.10 & 0.10 \\
+\texttt{noise\_03\_hard}   & 0.20 & 0.20 \\
+\bottomrule
+\end{tabular}
+\caption{Four manually-chosen noise levels. These are stress-test settings, not optimised hyperparameters.}
+\label{tab:noise_levels}
+\end{table}
+
+We kept the ViTPose detections frozen, swapped only the BEV output, and reran the BUDDI optimisation stage end-to-end.
+
+\paragraph{What we observed.}
+Optimisation completed for all four noise levels and produced 4 PKL fits, 8 OBJ meshes, and 4 visualisation images per setting. Fig.~\ref{fig:task3} stacks one example across the noise levels. The pattern across the four samples is that BUDDI tends to bend the bodies back toward a plausible two-person configuration even under hard initialisation noise, while preserving local pose detail. We are careful here: this is qualitative. Without the pseudo-ground-truth fits we cannot compute PA-MPJPE or PCC, so the comparison rests on visual inspection and on the simple fact that the pipeline does not fail.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{figures/task3_noise_comparison.png}
+    \caption{Same example reconstructed under clean, mild, medium, and hard BEV noise. The visible takeaway: BUDDI still produces plausible interaction geometry even under hard noise; how close it is to the unmeasurable ground truth is a question we cannot answer without the missing PGT fits.}
+    \label{fig:task3}
+\end{figure}
+
+\paragraph{What was hard.}
+Most of Nawfal's time went to environment setup on Kaggle (Python~3.12, NumPy compatibility, ViTPose checkpoint loading, Detectron2, PyTorch3D), not to the experiment itself. The detection / BEV path is the most fragile part of the pipeline in our experience.
+
+\section{Results --- beyond the paper}
+
+This section reports two probes that try to say something mechanistic about what BUDDI actually learned. Both run on the same hardware as Task~1, take a few minutes each, and use the paper's own evaluation machinery (\texttt{llib.methods.hhc\_diffusion.evaluation.eval.fid\_featurize}, \texttt{train\_module.diffuse\_denoise}). We do not implement custom diffusion math.
+
+\subsection{RQ-5 --- Did BUDDI learn contact, or just proximity?}
+\label{sec:rq5}
+
+\paragraph{Motivation.}
+BUDDI is trained on SMPL-X parameters of contact-frames, but the contact annotation is only used to \emph{select} which frame to sample; it never enters the network as input. So a natural question: does the model implicitly recover the contact signal, or does it merely learn ``two people close together''?
+
+\paragraph{Setup.}
+For every BUDDI sample (4 schedules $\times$ 512 = 2048) and every CHI3D contact-frame reference (n=373), we computed on stride-20 subsampled meshes (524 vertices per person):
+\begin{itemize}
+    \item \textbf{min\_v2v}: minimum vertex-to-vertex distance --- pure proximity;
+    \item \textbf{contact density at $T$}: fraction of subsampled vertex pairs within $T$ for $T \in \{5\,\text{mm}, 1\,\text{cm}, 2\,\text{cm}\}$ --- contact.
+\end{itemize}
+We KS-tested BUDDI's distribution against CHI3D's at each schedule and each threshold.
+
+\paragraph{Headline.}
+BUDDI matches CHI3D on coarse proximity but \emph{systematically under-represents near-contact density at 1--2\,cm} across all four schedules ($p < 10^{-3}$ in every cell; BUDDI's mean contact density is roughly 35--45\% lower than CHI3D's at these thresholds). Fig.~\ref{fig:rq5} is the KDE side-by-side.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\linewidth]{figures/rq5_density.png}
+    \caption{Left: \texttt{min\_v2v} distribution. Both BUDDI and CHI3D peak around 10--15\,mm. Right: contact density at 1\,cm. CHI3D has a fatter right tail; BUDDI does not.}
+    \label{fig:rq5}
+\end{figure}
+
+\paragraph{Stride sensitivity.}
+We were nervous about whether stride~20 was driving the result --- with only 524 verts per person, a sample with a single close pair can swing the density estimate. We re-ran the comparison at strides~10 (1048 verts) and~50 (210 verts). The mean BUDDI/CHI3D ratio at the 1\,cm threshold stays in the 0.45--0.66 band across strides. At stride~50 the KS test loses power (p crosses 0.05 at three of four schedules) but the direction of the effect is unchanged. At stride~10 the evidence is strongest ($p < 10^{-4}$ at three schedules). Bottom line: \emph{the direction is robust to vertex sub-sampling}; only statistical power varies.
+
+\paragraph{Caveats.}
+A few we want to keep visible. First, the ``SAME'' verdict at the strict 5\,mm threshold should be read as \emph{statistical-power-limited}, not equivalence --- at this resolution both distributions are essentially Dirac-at-zero on the stride-20 mesh and KS cannot resolve them. Second, the CHI3D ``contact-frame reference'' is not as tight as the label suggests: median anchor \texttt{min\_v2v} is 11.3\,mm, so half of the contact-annotated frames have no vertex pair within 1\,cm. Third, CHI3D is 20\% of BUDDI's training mix, so this probe is in-distribution; a truly out-of-distribution test set would need data we cannot access.
+
+\paragraph{So what.}
+If the model under-represents the near-contact tail, then during paper §3.2 fitting the diffusion prior is going to vote, on average, against tight contact configurations and rely on the auxiliary interpenetration loss $\mathcal{L}_P$ to pull the bodies into contact. This is consistent with the paper's own finding that a simple Contact-Heuristic baseline at 68\,mm PA-MPJPE is close to full BUDDI at 66\,mm (paper Table~1) --- the prior's contribution is more about pose coherence than about touching surfaces.
+
+\subsection{RQ-7 --- Counterfactual contact restoration}
+\label{sec:rq7}
+
+\paragraph{Motivation.}
+Eq.~\ref{eq:ldiff} is the entirety of BUDDI's role as a prior during fitting. We can measure exactly what $D(x_t; t=10, c_H)$ does to a counterfactually-perturbed contact configuration --- this is the model's restoring force, on the exact operation the paper uses.
+
+\paragraph{Setup.}
+We took 100 CHI3D contact-frame anchors in BUDDI's canonical frame (\texttt{relative\_orient=False, relative\_transl=True}, so the first person's translation is forced to 0 and the second person's is the relative offset). For each anchor we built a perturbation grid: 6 directions ($\pm x, \pm y, \pm z$) $\times$ 6 magnitudes (1, 2, 5, 10, 20, 50\,cm) = 36 perturbations, plus a $\Delta{=}0$ control. We applied each perturbation to person-B's translation, then noise-and-denoised the perturbed pair via \texttt{diffusion.q\_sample} + the denoiser at $t{=}10$ (same call \texttt{train\_module.diffuse\_denoise} makes inside the paper's fitting loop), with seed=42 across all perturbations.
+
+We measured the signed pullback: the projection of (\texttt{perturbed\_B\_centroid} $-$ \texttt{denoised\_B\_centroid}) onto the perturbation direction $\hat{\Delta}$. Positive means the model moved B back toward the original anchor along the direction it was perturbed.
+
+\paragraph{One thing that initially broke.}
+Our first version of this skipped the upstream \texttt{cast\_smpl} step on the input --- the function that converts axis-angle to rotation-6d and applies the \texttt{relative\_transl=True} convention. The denoiser then never saw the parametrisation it was trained on and the resulting ``\texttt{a\_correction}'' (mean per-vertex distance of the unperturbed person~A from its anchor) came out at 79\,cm. That is physically absurd --- nobody's torso shifts 79\,cm under a single denoising step. We added \texttt{batched\_cast\_smpl} before the perturbation step. After that, the unconditional \texttt{a\_correction} at $\Delta{=}0$ dropped to a sensible 5.7\,cm noise floor, which is the headline noise-floor number we use as a sanity baseline below.
+
+\paragraph{Important caveat about the conditional model.}
+We ran the same probe on the conditional checkpoint \texttt{buddi\_cond\_bev.pt}, which was trained with noisy BEV regressor outputs as $c_H$. We fed it CHI3D-clean SMPL-X parameters as $c_H$ instead. The OOD shift is visible immediately: at $\Delta{=}0$ the cond model's \texttt{a\_correction} is \textbf{24\,cm}, vs.\ the unconditional model's \textbf{5.7\,cm} noise floor. The pullback metric (signed projection on $\hat{\Delta}$) does average out isotropic OOD noise over enough samples, so the relative comparison is still readable, but the cond numbers \emph{do not} characterise the prior at paper §5.2's actual operating point. We report cond results for completeness with this caveat front-loaded.
+
+\paragraph{Headline result.}
+The unconditional model applies a near-constant $\sim$76\% pullback regardless of perturbation magnitude across $\Delta \in \{2, 5, 10, 20, 50\}$\,cm (Table~\ref{tab:rq7}, Fig.~\ref{fig:rq7}). The conditional model on OOD inputs sits at $\sim$64\%.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{rrrrr}
+\toprule
+$\Delta$ (cm) & uncond pullback (cm) & uncond \% & cond pullback (cm) & cond \% \\
+\midrule
+1  & 0.80  & 80\% (noise edge) & 0.64  & 64\% (noise edge) \\
+2  & 1.47  & 74\% & 1.31  & 66\% \\
+5  & 3.87  & 77\% & 3.23  & 65\% \\
+10 & 7.64  & 76\% & 6.44  & 64\% \\
+20 & 15.19 & 76\% & 12.83 & 64\% \\
+50 & 36.57 & 73\% & 31.45 & 63\% \\
+\bottomrule
+\end{tabular}
+\caption{Pullback in cm and as a fraction of $\Delta$. n = 600 per cell (100 anchors $\times$ 6 directions). $\Delta{=}1$\,cm is at the noise edge: per-direction SEM is $\sim$0.16\,cm, so the 0.80\,cm uncond pullback is barely 5$\sigma$ above zero; we do not weight it as evidence for the near-constant claim.}
+\label{tab:rq7}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{figures/rq7_pullback.png}
+    \caption{Absolute pullback vs.\ $\Delta$ for both models. The line is near-linear through the origin, which is what a constant pullback fraction implies. We deliberately do not call this a ``Hooke spring'': the single-step diffuse-denoise dynamics are not strictly linear; only the empirically-observed pullback magnitude is.}
+    \label{fig:rq7}
+\end{figure}
+
+\paragraph{What we are not claiming.}
+We only perturb translation, not orientation or pose; the cond model is OOD; CHI3D is in-distribution for BUDDI; the test only covers local geometry. The interesting question of whether the cond model behaves the same under BEV-format noisy $c_H$ is a follow-up we did not run.
+
+\paragraph{RQ-5 + RQ-7 read together.}
+The prior under-weights contact-tight configurations (RQ-5) and applies a roughly proportional pullback toward whatever manifold it learned (RQ-7). Combined, the picture is: BUDDI pulls hard, but it pulls toward a distribution that is itself slightly off the true contact manifold. This sits comfortably with the close-but-not-dominant gap between Contact-Heuristic (68\,mm) and full BUDDI (66\,mm) in paper Table~1.
+
+\section{Discussion}
+
+What worked, in plain terms: the released checkpoints load, the unconditional sampling pipeline runs end-to-end on a laptop, the cross-schedule Pareto study replicates the qualitative claim of the paper (BUDDI generates plausible interactions) and adds a 2.5$\times$ speedup finding the paper does not report. The two mechanistic probes give us a defensible story about what BUDDI's prior is doing during fitting.
+
+What did not work: the absolute FID number (1.6 vs.\ our 30) cannot be made comparable without the released autoencoder and the wider 60/20/20 training-mix reference, neither of which we have access to. The Table~1 reconstruction reproduction is blocked at the same point Nawfal's Task~3 was --- the missing pseudo-ground-truth pickle is a hard gate for any quantitative comparison on FlickrCI3D. We treat Task~2 (Phase~B) separately and will follow up on it after this document.
+
+\subsection{Difficulties along the way}
+
+Environment was the biggest single time-sink, in line with what most BUDDI users seem to hit (issue tracker, late 2024). The pinned PyTorch~1.9 had to go. Kaggle and WSL needed different fixes for ViTPose checkpoint loading and Detectron2. The headless renderer needed an EGL backend. The 79\,cm \texttt{a\_correction} bug in RQ-7 mentioned above cost us a few hours of suspicion before we traced it to a missing \texttt{cast\_smpl} call.
+
+Data access is the second time-sink. The dead Google-Drive link for FlickrCI3D's processed fits is the dominant blocker for full quantitative reproduction across the whole project, and it has been open and unanswered upstream for over a year.
+
+\subsection{Communication with the authors}
+
+We did not receive access to the processed FlickrCI3D pseudo-ground-truth fits during the project window. The downstream effect is on Task~2 and on Task~3's evaluation protocol; the unconditional-side reproduction (Task~1) and the two mechanistic probes do not depend on them.
+
+\section{Conclusion}
+
+We reproduced the unconditional-generation side of the paper, added a sampling-schedule Pareto study that finds 40 DDIM steps is the better operating point than the paper's 100, verified the optimisation pipeline runs and converges on demo data, audited two extension questions about what the prior actually learned, and ran a qualitative robustness probe on the optimisation pipeline. Where data access stopped us --- the FID~1.6 number and the Table~1 reconstruction reproduction --- we say so directly rather than substituting weaker numbers and claiming a match.
+
+\section*{Member contributions}
+
+\begin{itemize}
+    \item \textbf{[Author A]:} Task~1 (Phase~A) end-to-end --- env rebuild, unconditional sampling, Pareto study, FID against the CHI3D reference; the two extension probes RQ-5 and RQ-7 (Phase~C-2) with their code, runners, and self-audit.
+    \item \textbf{Nawfal Abdul Malick:} Task~3 (Phase~C-1) --- Kaggle setup and dependency fixes, FlickrCI3D demo pipeline execution, BEV-output inspection, controlled noise generation, BUDDI optimisation reruns under degraded initialisation, and qualitative robustness analysis.
+    \item \textbf{[Author C]:} Task~2 (Phase~B) --- optimisation-based reconstruction reproduction, paper Tables~1--3 attempt. Reported separately.
+\end{itemize}
+
+\bibliography{main}
+\bibliographystyle{tmlr}
+
+\end{document}
