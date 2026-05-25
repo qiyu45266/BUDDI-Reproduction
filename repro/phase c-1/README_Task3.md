@@ -80,7 +80,6 @@ Expected folder structure:
 task3/
 ├── task-3.ipynb
 ├── README.md
-├── requirements_task3.txt        optional
 └── figures/
     └── task3_noise_comparison.png
 ```
