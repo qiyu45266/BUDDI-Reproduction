@@ -49,3 +49,27 @@ datasets/**/*.pkl
 # ---- Misc local ----
 *.zip
 miniconda.sh
+
+
+
+# Task 3 ignored files
+*.pt
+*.pth
+*.pkl
+*.npz
+*.obj
+*.zip
+*.tar
+*.tar.gz
+
+essentials/
+body_models/
+demo/data/vitpose_live/
+demo/data/bev_live/
+demo/optimization/
+task3_noise_results/
+task3_baseline_outputs/
+
+.ipynb_checkpoints/
+__pycache__/
+.DS_Store
